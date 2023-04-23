@@ -1,0 +1,68 @@
+RateLimiting 방식
+* User Based - 주어진 기간 동안의 유저 요청 개수를 제한하는 방식
+* Concurrent - 유져별로 동시에 맺을 수 있는 세션 개수를 제한하는 방식
+* Location/IP - 지역별로 요청 개수를 제한하는 방식
+* Server Based - 특정 서버의 요청 개수를 제한하는 방식
+
+
+RateLimiter 알고리즘 종류 - https://builtin.com/software-engineering-perspectives/rate-limiter
+* Leaky Bucket
+	* 입력은 급증할 수 있으나 출력은 일정하게 유지한다.
+	* [단점] 버퍼가 꽉차면 입력이 제때 처리되지 못하는 Starvation 이슈가 발생할 수 있다
+	* [단점] 요청이 주어진 시간 내에 완료된다는 보장이 없다
+	* 변수 - queue, 처리율(ex. 처리개수/분)
+
+* Token Bucket
+	* 클라이언트마다 일정 개수의 토큰을 부여받는다. 토큰은 클라이언트의 ‘사용량’이라고 볼 수 있다.
+   	  즉, 클라이언트마다 주어진 시간동안 요청할 수 있는 제한이 있으며, 이 제한이 토큰개수로 표현된다.
+	* 요청을 받았을 때, ‘토큰 제한’ < ‘클라이언트 현재 토큰 개수’인 경우, 요청은 버려진다(discard)
+	* 요청을 받았을 때, ‘토큰 제한’ > ‘클라이언트 현재 토큰 개수’인 경우, 요청은 처리되고 Bucket에 존재하는 토큰이 줄어든다
+	* 만약 요청을 받았을 때, TimeDuration이 달라졌으면 토큰을 리필하고 1개 줄인다.
+	* [단점] 분산시스템에서 Race Condition 문제가 발생할 수 있다 (토큰 개수)
+	* 변수 - timeDuration(refill시점 결정을 위함), requestTime, tokenLeft, user
+
+* Fixed Window
+	* 주어진 시간마다 카운터를 유지하는 방안이다.
+  	  ex. 00:00~00:01 : 1(카운트)
+	* 요청을 받아서 처리할 때마다 TimeWindow의 카운터를 증가시킨다.
+   	* 요청을 받았을 때, ‘카운터 상한’ < ‘TimeWindow 카운터’인 경우 요청은 버려진다(discard)
+	* [단점] 여러 TimeWindow 유지를 위한 메모리소모
+	* 변수 - User_TimeWindow별 처리한 요청개수(increment)
+
+
+* Sliding Log
+	* 클라이언트의 요청은 시간 순으로 정렬되어 일정기간 기록된다.
+	* 특정 주기마다 ‘요청률’이 계산된다.
+		* 요청을 받을 때마다 계산해도 되지 않을까?
+	* 요청은 (Time, Value)로 구성된 엔트리이다.
+	* 요청 엔트리는 자료구조(ex. 리스트)에 정렬되어 저장된다.
+	* 요청을 받으면 리스트에서 주어진 기간(Duration. Ex. 최근 1분)동안 수신한 요청(엔트리) 개수를 확인한다.
+	  상한값 < ‘최근 N분간 수신한 요청(엔트리)’ 개수인 경우, 요청은 버려진다.
+	  처리가 완료된 요청은 리스트에 추가된다.
+	* [단점] 유져별로 Rate Limit (ex. 10 requests / min인 경우, 10개)만큼의 메모리가 사용된다.
+
+* Sliding Window Counter
+	* Sliding Log 방식과 비슷하지만, 각 요청을 그대로 저장하는 것이 아니라
+	  timeWindow 별로 요청개수 값을 유지하는 방식이다.
+	* 요청을 받으면, Duration(ex. 최근 1분/2분..)동안의 엔트리값을 리스트에서 가져와서 sum을 구한다.
+	* 상한선 < sum인 경우, 요청은 버려진다.
+
+RateLimiter 구현 시 유의사항
+* 분산환경에서의 RaceCondition/Inconsistency 이슈
+	* 동일 사용자의 요청 2개가 동시에 서로 다른 서버로 전달됨으로 인하여 카운터값이 잘못 사용 및 업데이트되는 이슈
+
+	* [해결방안1] Sticky Session - 동일 사용자의 요청은 반드시 특정 서버쪽으로만 라우팅되도록 하는 기법 (LB단에서 적용)
+		* 요청 분산이 제대로 되지 않을 수도 있다.
+
+	* [해결방안2] Lock - 어느 서버에서건 RateLimiter에서 카운터값(ex.DB)을 접근할 때, Lock으로 동시성 이슈를 막는 방법
+		* Latency 증가
+
+
+RateLimiter 사용사례
+* API 호출 횟수 제한 (developer api)
+
+
+
+
+
+
