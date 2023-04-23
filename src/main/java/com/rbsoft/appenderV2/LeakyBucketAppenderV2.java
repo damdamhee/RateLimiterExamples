@@ -71,9 +71,7 @@ public class LeakyBucketAppenderV2 extends AbstractAppender {
         int retried = 0;
         while(retried < this.maxRetry) {
             try {
-                if (Thread.currentThread().isInterrupted()) {
-                    throw new IllegalStateException("is interrupted"); //TODO
-                }
+                if (Thread.currentThread().isInterrupted()) throw new IllegalStateException("is interrupted"); //TODO -msg
                 if(this.rateLimiter.acquire()) {
                     this.appender.append(record.toImmutable());
                     break;
